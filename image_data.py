@@ -5,10 +5,12 @@ import numpy as np
 from PIL import Image
 import openai
 import base64
+from tqdm import tqdm
+from dotenv import load_dotenv
 
-client = openai.OpenAI(
-    api_key=os.environ.get("OPENAI_API_KEY")
-)
+load_dotenv()
+
+client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 # --- Mappings ---
 race_mapping = {
@@ -71,6 +73,16 @@ def image_exists(row):
     image_filename = f"{sample_id}.jpg"
     image_path = os.path.join(image_folder, image_filename)
     return os.path.exists(image_path)
+
+
+def stratified_sampling(
+    df, score_column="R13 D SCORE OF CLOCK DRAWING TEST", samples_per_category=10
+):
+    """Selects a stratified sample of `samples_per_category` from each score group."""
+    stratified_df = df.groupby(score_column, group_keys=False).apply(
+        lambda x: x.sample(min(len(x), samples_per_category), random_state=42),
+    )
+    return stratified_df
 
 
 # --- Function to Score Clock Drawing Using GPT-4o ---
@@ -150,7 +162,12 @@ def process_scoring(df_filtered, use_patient_info=True):
     score_differences = []
     actual_scores = []
 
-    for idx, row in df_filtered.iterrows():
+    for idx, row in tqdm(
+        df_filtered.iterrows(),
+        total=len(df_filtered),
+        desc="Scoring Progress",
+        ncols=100,
+    ):
         sample_id = row["NHATS SAMPLED PERSON ID"]
         image_filename = f"{sample_id}.jpg"
         image_path = os.path.join(image_folder, image_filename)
@@ -223,39 +240,38 @@ def calculate_metrics(df, col_predicted):
 excel_file = "sp_clock_drawing.xlsx"  # Update with your actual file path
 df = pd.read_excel(excel_file)
 
+
 # --- Set Folder Path for Images ---
 image_folder = "NHATS_R13_ClockDrawings_JPG"
 
 
 # Create a filtered DataFrame containing only rows that have images
 df_filtered = df[df.apply(image_exists, axis=1)].copy()
-df_filtered = df_filtered.head(50)  # Use only first 50 rows for testing
 
+# Perform stratified sampling to get 10 samples per score category
+df_filtered = stratified_sampling(df_filtered)
 
 # --- Save Both Versions to Excel ---
 df_with_info = process_scoring(df_filtered, use_patient_info=True)
 df_no_info = process_scoring(df_filtered, use_patient_info=False)
 
-# Merge Results for Comparison
-df_merged = df_with_info.merge(
-    df_no_info,
-    on=["NHATS SAMPLED PERSON ID", "Actual Score"],
-    suffixes=("_with_info", "_no_info"),
-)
-
-
 rmse_with_info, acc_with_info = calculate_metrics(
-    df_merged, "Predicted Score (With Patient Info)"
+    df_with_info, "Predicted Score (With Patient Info)"
 )
 rmse_no_info, acc_no_info = calculate_metrics(
-    df_merged, "Predicted Score (No Patient Info)"
+    df_no_info, "Predicted Score (No Patient Info)"
 )
 
-
-# --- Save to Excel ---
-output_file = "nhats_clock_drawing_scores_comparison.xlsx"
+# --- Save Both Versions to Excel ---
+output_file = "cdt_stratified.xlsx"
 with pd.ExcelWriter(output_file) as writer:
-    df_merged.to_excel(writer, sheet_name="Predictions", index=False)
+    # Save "With Patient Info" predictions in a separate sheet
+    df_with_info.to_excel(writer, sheet_name="With Patient Info", index=False)
+
+    # Save "Without Patient Info" predictions in another sheet
+    df_no_info.to_excel(writer, sheet_name="Without Patient Info", index=False)
+
+    # Save RMSE & Accuracy metrics in a separate sheet
     pd.DataFrame(
         {
             "Version": ["With Patient Info", "No Patient Info"],
