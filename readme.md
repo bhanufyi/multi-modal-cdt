@@ -26,10 +26,12 @@
 | Without Patient Info | **0.732** |
 
 
-With even distribution.
-Version	RMSE	Regression Accuracy	
-With Patient Info	0.966091783079296	0.693333333333333	
-No Patient Info	1.01653004546513	0.706666666666667	
+| Version | RMSE | Regression Accuracy |
+| --- | --- | --- |
+| With Patient Info | 0.9661 | 0.6933 |
+| No Patient Info | 1.0165 | 0.7067 |
+
+
 - **Key Findings:**
     - **Clock drawing image** contributes the most to scoring accuracy
     - **Demographic information* is not highly significant
