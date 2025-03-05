@@ -2,7 +2,8 @@
 
 ### **Dataset & Setup**
 
-- Downloaded data from [NHATS](https://nhats.org/researcher/data-access)
+- Downloaded data from [NHATS](https://nhats.org/researcher/data-access) 
+- you can download images from here `gs://bhanufyi-ml-datasets/dataset.zip` Unzip it, you'll have images for all rounds.
 - Used **Round 13** dataset for the current test
 - Selected **50 samples** for evaluation
 
@@ -43,3 +44,6 @@
 - **Expand dataset** to include more samples for better generalization
 - **Experiment with additional demographic fields** for improved context
 - **Test with other multi-modal LLMs** to compare performance
+
+
+
