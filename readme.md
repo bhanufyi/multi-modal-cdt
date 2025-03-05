@@ -1,24 +1,37 @@
-### Multi Modal LLM's Test for CDT Score
+### Multi-Modal LLM Test for CDT Scoring
 
-I have downloaded dataset from [NHATS](https://nhats.org/researcher/data-access)
+### **Dataset & Setup**
 
-Used Round 13 for the current test. I have used 50 samples at present. 
+- Downloaded data from [NHATS](https://nhats.org/researcher/data-access)
+- Used **Round 13** dataset for the current test
+- Selected **50 samples** for evaluation
 
-Demographic and Health data are present in SAS format. So I had to convert them to XLSX format, I have selected only records where CDT score is present.
+### **Data Processing**
 
-I have used the following columns for Demographics 
-`R13 WB3 AGE YOU FEEL MOST OF TIME`
-`R13 D RACE AND HISPANIC ETHNICITY WHEN ADDED`
-`R13 D LONGEST OCCUPATION CATEGORY`
+- **Demographic & Health Data:** Originally in SAS format, converted to XLSX
+- **Filtering Criteria:** Selected only records where **CDT score** is available
+- **Demographic Features Used:**
+    - `R13 WB3 AGE YOU FEEL MOST OF TIME`
+    - `R13 D RACE AND HISPANIC ETHNICITY WHEN ADDED`
+    - `R13 D LONGEST OCCUPATION CATEGORY`
+- **Testing Approaches:**
+    - **With demographic context + clock drawing image**
+    - **Using only the clock drawing image**
 
-and clock drawing image. 
+### **Results**
 
-Tried with both with demographic context and only image. 
+| Model Configuration | Accuracy |
+| --- | --- |
+| With Patient Info | **0.74** |
+| Without Patient Info | **0.732** |
+- **Key Findings:**
+    - **Clock drawing image** contributes the most to scoring accuracy
+    - **Demographic information** provides some improvement but is not highly significant
+    - **Test size is small**, further validation required with a larger dataset
+    - Additional demographic fields might improve results
 
-Accuracy:
-With Patient Info Accuracy: 0.74 
-Without Patient Info Accuracy: 0.732
+### **Next Steps**
 
-Most of the weightage is given to the image. Demographic helping a bit, but not significant. Again the test size is small, we might have to select more fields for context and more samples to generalize the results.
-
-Next step would be to try out with other Multi Modal LLM's.
+- **Expand dataset** to include more samples for better generalization
+- **Experiment with additional demographic fields** for improved context
+- **Test with other multi-modal LLMs** to compare performance
