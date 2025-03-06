@@ -45,5 +45,7 @@
 - **Experiment with additional demographic fields** for improved context
 - **Test with other multi-modal LLMs** to compare performance
 
+#### Accuracy Plot:
 
+![Accuracy Plot](./stratified_accuracy_plot.png)
 
