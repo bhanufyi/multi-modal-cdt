@@ -359,118 +359,115 @@ def segment_clean_with_bounding_boxes(image_path, output_path=None, buffer_perce
     }
 
 
-def crop_and_resize_image(result_dict, buffer_percent=20, output_size=(224, 224)):
+def crop_and_resize_image(result_dict, output_size=(224, 224)):
     """
-    Simple two-strategy approach:
-    1. If bounding box < 224x224: crop to that bounding box
-    2. If bounding box >= 224x224: resize to 224x224
-
+    Crop and resize the image focused on the dilated clock contour.
+    
     Args:
         result_dict: Dictionary containing the cleaned image and detection data
-        buffer_percent: Percentage of buffer to add around min-max (default 20%)
         output_size: Target size for the final image (default 224x224)
-
+        
     Returns:
-        Resized image or None on failure
+        Dictionary with resized image and metadata or None on failure
     """
     if result_dict is None:
         return None
-
-    # Extract necessary data from the result dictionary
+        
+    # Extract necessary data
     clean_img = result_dict["cleaned_img"]
-
+    dilated_contours = result_dict.get("dilated_contours", [])
+    
     # Get image dimensions
     height, width = clean_img.shape[:2]
     output_w, output_h = output_size
-
-    # Find all non-white pixels (clock elements)
-    non_white_mask = np.zeros((height, width), dtype=np.uint8)
-    # Consider all channels - if any channel is not 250, it's not white
-    non_white_mask[np.any(clean_img < 250, axis=2)] = 255
-
-    # Find all non-zero coordinates in the mask
-    y_coords, x_coords = np.where(non_white_mask > 0)
-
-    # If no elements found, return the whole image resized
-    if len(y_coords) == 0 or len(x_coords) == 0:
-        print("No clock elements found in the image")
-        result_img = cv2.resize(clean_img, output_size, interpolation=cv2.INTER_AREA)
-        return {
-            "resized_img": result_img,
-            "crop_coords": (0, 0, width, height),
-            "strategy": "full_resize",
-        }
-
-    # Find min-max coordinates of all clock elements
-    min_x, max_x = np.min(x_coords), np.max(x_coords)
-    min_y, max_y = np.min(y_coords), np.max(y_coords)
-
-    # Calculate content dimensions
-    content_width = max_x - min_x + 1
-    content_height = max_y - min_y + 1
-
-    # Add buffer based on content size
-    buffer_x = int(content_width * buffer_percent / 100)
-    buffer_y = int(content_height * buffer_percent / 100)
-
-    # Calculate crop coordinates with buffer
-    crop_min_x = max(0, min_x - buffer_x)
-    crop_min_y = max(0, min_y - buffer_y)
-    crop_max_x = min(width, max_x + buffer_x)
-    crop_max_y = min(height, max_y + buffer_y)
-
-    # Calculate crop dimensions
-    crop_width = crop_max_x - crop_min_x
-    crop_height = crop_max_y - crop_min_y
-
-    # Ensure square crop by expanding the smaller dimension
-    if crop_width > crop_height:
-        # Width is larger, adjust height to match (centered)
-        diff = crop_width - crop_height
-        crop_min_y = max(0, crop_min_y - diff // 2)
-        crop_max_y = min(height, crop_min_y + crop_width)
+    
+    # If no dilated contours found, use non-white pixel detection as fallback
+    if len(dilated_contours) == 0:
+        # Find all non-white pixels (clock elements)
+        non_white_mask = np.zeros((height, width), dtype=np.uint8)
+        # Consider all channels - if any channel is not 250, it's not white
+        non_white_mask[np.any(clean_img < 250, axis=2)] = 255
+        
+        # Find all non-zero coordinates
+        y_coords, x_coords = np.where(non_white_mask > 0)
+        
+        # If no elements found, return the whole image resized
+        if len(y_coords) == 0 or len(x_coords) == 0:
+            print("No clock elements found in the image")
+            result_img = cv2.resize(clean_img, output_size, interpolation=cv2.INTER_AREA)
+            return {
+                "resized_img": result_img,
+                "crop_coords": (0, 0, width, height),
+                "strategy": "full_resize_fallback"
+            }
+            
+        # Find min-max coordinates of all clock elements
+        min_x, max_x = np.min(x_coords), np.max(x_coords)
+        min_y, max_y = np.min(y_coords), np.max(y_coords)
     else:
-        # Height is larger, adjust width to match (centered)
-        diff = crop_height - crop_width
-        crop_min_x = max(0, crop_min_x - diff // 2)
-        crop_max_x = min(width, crop_min_x + crop_height)
-
+        # Use the dilated contour(s) for cropping
+        # Combine all contours to find overall bounding rect
+        all_points = np.vstack([cnt.reshape(-1, 2) for cnt in dilated_contours])
+        x, y, w, h = cv2.boundingRect(all_points)
+        min_x, max_x = x, x + w
+        min_y, max_y = y, y + h
+    
+    # Calculate content center
+    center_x = (min_x + max_x) // 2
+    center_y = (min_y + max_y) // 2
+    
+    # Determine the maximum dimension of the clock
+    max_dimension = max(max_x - min_x, max_y - min_y)
+    
+    # Add a 15% margin for aesthetics
+    margin = int(max_dimension * 0.15)
+    max_dimension_with_margin = max_dimension + 2 * margin
+    
+    # Ensure we don't exceed image boundaries
+    half_size = max_dimension_with_margin // 2
+    
+    # Calculate square crop coordinates centered on the clock
+    crop_min_x = max(0, center_x - half_size)
+    crop_min_y = max(0, center_y - half_size)
+    crop_max_x = min(width, center_x + half_size)
+    crop_max_y = min(height, center_y + half_size)
+    
+    # Adjust if we hit boundaries to maintain square aspect ratio
+    crop_w = crop_max_x - crop_min_x
+    crop_h = crop_max_y - crop_min_y
+    
+    # If not a perfect square due to boundary constraints, adjust
+    if crop_w != crop_h:
+        # Use the smaller dimension
+        new_size = min(crop_w, crop_h)
+        
+        # Recalculate centered on the clock
+        if crop_w > crop_h:
+            # Height is limiting factor
+            extra_width = crop_w - new_size
+            crop_min_x += extra_width // 2
+            crop_max_x = crop_min_x + new_size
+        else:
+            # Width is limiting factor
+            extra_height = crop_h - new_size
+            crop_min_y += extra_height // 2
+            crop_max_y = crop_min_y + new_size
+    
     # Final crop dimensions
     final_crop_w = crop_max_x - crop_min_x
     final_crop_h = crop_max_y - crop_min_y
-
-    # Determine strategy based on crop size vs output size
-    is_small_crop = final_crop_w < output_w and final_crop_h < output_h
-
-    if is_small_crop:
-        # STRATEGY 1: Bounding box is smaller than 224x224, just crop it
-        cropped_img = clean_img[crop_min_y:crop_max_y, crop_min_x:crop_max_x]
-
-        # Create a white canvas of the output size
-        canvas = np.ones((*output_size, 3), dtype=np.uint8) * 255
-
-        # Calculate position to place the crop in the center of the canvas
-        paste_x = (output_w - final_crop_w) // 2
-        paste_y = (output_h - final_crop_h) // 2
-
-        # Place the cropped image on the canvas
-        canvas[paste_y : paste_y + final_crop_h, paste_x : paste_x + final_crop_w] = (
-            cropped_img
-        )
-
-        result_img = canvas
-        strategy = "crop_to_bounding_box"
-    else:
-        # STRATEGY 2: Bounding box is larger than or equal to 224x224, resize the whole image
-        result_img = cv2.resize(clean_img, output_size, interpolation=cv2.INTER_AREA)
-        strategy = "resize_whole_image"
-
+    
+    # Crop the image to the square region
+    cropped_img = clean_img[crop_min_y:crop_max_y, crop_min_x:crop_max_x]
+    
+    # Resize to the target output size
+    result_img = cv2.resize(cropped_img, output_size, interpolation=cv2.INTER_AREA)
+    
     return {
         "resized_img": result_img,
         "crop_coords": (crop_min_x, crop_min_y, final_crop_w, final_crop_h),
-        "strategy": strategy,
+        "strategy": "centered_square_crop"
     }
-
 
 def process_subset_test_folder(subset_test_dir, output_size=(224, 224)):
     """
