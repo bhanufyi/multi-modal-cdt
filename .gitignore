@@ -3,3 +3,5 @@ NHATS_R*
 dataset.zip
 local-dev.json
 .env
+.ipynb_checkpoints
+*.gz
