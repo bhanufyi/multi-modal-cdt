@@ -6,7 +6,7 @@ import time
 
 
 def segment_clean_with_bounding_boxes(image_path, output_path=None, buffer_percent=20):
-    """https://claude.ai/chat/c58e8c89-a22c-4c6f-8ef8-3fb43320114f
+    """
     Detect clock and black regions, then delete black regions only if they're
     outside the clock's actual shape (not just the bounding box).
 
@@ -30,10 +30,7 @@ def segment_clean_with_bounding_boxes(image_path, output_path=None, buffer_perce
     # Convert to grayscale
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # Create output image for visualization with bounding boxes
-    output_img = img.copy()
-
-    # Create a clean copy of the image for the final result (no boxes)
+    # Create a clean copy of the image for the final result
     clean_img = img.copy()
 
     # STAGE 1: Detect very dark regions (black boxes) using a low threshold
@@ -52,7 +49,7 @@ def segment_clean_with_bounding_boxes(image_path, output_path=None, buffer_perce
     blue_boxes = []
     border_regions = []  # Store contours for exclusion mask
 
-    # Filter and draw rectangles around black regions
+    # Filter black regions
     for contour in black_contours:
         x, y, w, h = cv2.boundingRect(contour)
         area = cv2.contourArea(contour)
@@ -81,9 +78,6 @@ def segment_clean_with_bounding_boxes(image_path, output_path=None, buffer_perce
 
         # Accept if it's dark enough, near a border, and reasonably rectangular
         if mean_intensity < 50 and is_near_border and rectangularity > 0.5:
-            # Draw blue box for black border regions in visualization
-            cv2.rectangle(output_img, (x, y), (x + w, y + h), (255, 0, 0), 2)
-
             # Store blue box coordinates
             blue_boxes.append({"contour": contour, "x": x, "y": y, "w": w, "h": h})
 
@@ -187,7 +181,7 @@ def segment_clean_with_bounding_boxes(image_path, output_path=None, buffer_perce
     # Convert to uint8 for OpenCV operations
     clock_mask = clock_mask.astype(np.uint8)
 
-    # Find contours of the combined clock region for visualization
+    # Find contours of the combined clock region
     clock_contours, _ = cv2.findContours(
         clock_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
     )
@@ -203,15 +197,6 @@ def segment_clean_with_bounding_boxes(image_path, output_path=None, buffer_perce
     # Store the red bounding box coordinates
     red_box = {"x": x_clock, "y": y_clock, "w": w_clock, "h": h_clock}
 
-    # Draw red box around the clock (no buffer) in visualization
-    cv2.rectangle(
-        output_img,
-        (x_clock, y_clock),
-        (x_clock + w_clock, y_clock + h_clock),
-        (0, 0, 255),
-        2,
-    )
-
     # Create variables for our clock contour approaches
     ellipse_contour = None
     hull_contour = None
@@ -222,9 +207,6 @@ def segment_clean_with_bounding_boxes(image_path, output_path=None, buffer_perce
 
     # Create a convex hull from the detected points
     hull_contour = cv2.convexHull(combined_contour)
-
-    # Draw the hull-based contour in purple for visualization
-    cv2.drawContours(output_img, [hull_contour], 0, (255, 0, 255), 2)
 
     # Try to fit an ellipse if we have enough points
     if len(combined_contour) >= 5:
@@ -241,9 +223,6 @@ def segment_clean_with_bounding_boxes(image_path, output_path=None, buffer_perce
                 360,
                 5,
             )
-
-            # Draw the ellipse in yellow for visualization
-            cv2.drawContours(output_img, [ellipse_contour], 0, (0, 255, 255), 2)
 
             # Use the ellipse as our primary clock contour
             final_clock_contour = ellipse_contour
@@ -269,18 +248,15 @@ def segment_clean_with_bounding_boxes(image_path, output_path=None, buffer_perce
     final_clock_mask = np.zeros((height, width), dtype=np.uint8)
     cv2.drawContours(final_clock_mask, [final_clock_contour], 0, 255, -1)
 
-    # Apply buffer to create the dilated contour (green)
+    # Apply buffer to create the dilated contour
     buffer_kernel_size = max(3, int(min(width, height) * buffer_percent / 300))
     buffer_kernel = np.ones((buffer_kernel_size, buffer_kernel_size), np.uint8)
     dilated_clock_mask = cv2.dilate(final_clock_mask, buffer_kernel, iterations=1)
 
-    # Find contours of the dilated mask for visualization
+    # Find contours of the dilated mask
     dilated_contours, _ = cv2.findContours(
         dilated_clock_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
     )
-
-    # Draw the dilated contour in green for visualization
-    cv2.drawContours(output_img, dilated_contours, -1, (0, 255, 0), 2)
 
     # Create a mask for regions to delete (make white)
     regions_to_delete_mask = np.zeros((height, width), dtype=np.uint8)
@@ -363,8 +339,6 @@ def segment_clean_with_bounding_boxes(image_path, output_path=None, buffer_perce
 
         if overlap:
             valid_dark_contours.append(contour)
-            # Add to visualization in cyan
-            cv2.drawContours(output_img, [contour], -1, (255, 255, 0), 2)
 
     # Return cleaned image, red box, blue boxes, and all contours for cropping
     all_element_contours = []
@@ -381,7 +355,7 @@ def segment_clean_with_bounding_boxes(image_path, output_path=None, buffer_perce
         "red_box": red_box,
         "blue_boxes": blue_boxes,
         "all_element_contours": all_element_contours,
-        "dilated_contours": dilated_contours
+        "dilated_contours": dilated_contours,
     }
 
 
